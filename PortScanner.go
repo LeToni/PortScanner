@@ -6,34 +6,39 @@ import (
 	"sort"
 )
 
-func scanner(ports, results chan int) {
-	for port := range ports {
-		address := fmt.Sprintf("scanme.nmap.org:%d", port)
-		connection, err := net.Dial("tcp", address)
+func scanner(port int) int {
 
-		if err != nil {
-			results <- 0
-			continue
-		}
+	address := fmt.Sprintf("scanme.nmap.org:%d", port)
+	fmt.Println(address)
+	connection, err := net.Dial("tcp", address)
 
-		connection.Close()
-		results <- port
+	if err != nil {
+		return 0
+	}
+
+	defer connection.Close()
+	return port
+}
+
+func worker(jobs <-chan int, results chan<- int) {
+	for n := range jobs {
+		results <- scanner(n)
 	}
 }
 
 func main() {
-	ports := make(chan int, 100)
-	results := make(chan int)
 
+	jobs := make(chan int, 100)
+	results := make(chan int)
 	var openPorts []int
 
-	for i := 0; i < cap(ports); i++ {
-		go scanner(ports, results)
+	for i := 0; i < cap(jobs); i++ {
+		go worker(jobs, results)
 	}
 
 	go func() {
 		for i := 1; i <= 1024; i++ {
-			ports <- i
+			jobs <- i
 		}
 	}()
 
@@ -44,7 +49,7 @@ func main() {
 		}
 	}
 
-	close(ports)
+	close(jobs)
 	close(results)
 
 	sort.Ints(openPorts)
